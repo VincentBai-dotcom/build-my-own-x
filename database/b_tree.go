@@ -3,6 +3,7 @@ package database
 import (
 	"bytes"
 	"encoding/binary"
+	"project/utils"
 )
 
 const HEADER = 4
@@ -29,16 +30,20 @@ func (node BNode) setHeader(btype uint16, nkeys uint16) {
 
 // pointers
 func (node BNode) getPtr(idx uint16) uint64 {
-	assert(idx < node.nkeys())
+	utils.Assert(idx < node.nkeys())
 	pos := HEADER + 8*idx
 	return binary.LittleEndian.Uint64(node[pos:])
 }
 
-func (node BNode) setPtr(idx uint16, val uint64) {}
+func (node BNode) setPtr(idx uint16, val uint64) {
+	utils.Assert(idx < node.nkeys())
+	pos := HEADER + 8*idx
+	binary.LittleEndian.PutUint64(node[pos:], val)
+}
 
 // offset list
 func offsetPos(node BNode, idx uint16) uint16 {
-	assert(1 <= idx && idx <= node.nkeys())
+	utils.Assert(1 <= idx && idx <= node.nkeys())
 	return HEADER + 8*node.nkeys() + 2*(idx-1)
 }
 
@@ -53,11 +58,11 @@ func (node BNode) setOffset(idx uint16, offset uint16) {}
 
 // key-values
 func (node BNode) kvPos(idx uint16) uint16 {
-	assert(idx <= node.nkeys())
+	utils.Assert(idx <= node.nkeys())
 	return HEADER + 8*node.nkeys() + 2*node.nkeys() + node.getOffset(idx)
 }
 func (node BNode) getKey(idx uint16) []byte {
-	assert(idx < node.nkeys())
+	utils.Assert(idx < node.nkeys())
 	pos := node.kvPos(idx)
 	klen := binary.LittleEndian.Uint16(node[pos:])
 	return node[pos+4:][:klen]
@@ -211,7 +216,8 @@ func nodeSplit3(old BNode) (uint16, [3]BNode) {
 		old = old[:BTREE_PAGE_SIZE]
 		return 1, [3]BNode{old} // not split
 	}
-	left := BNode(make([]byte, 2*BTREE_PAGE_SIZE)) // might be split later right := BNode(make([]byte, BTREE_PAGE_SIZE))
+	left := BNode(make([]byte, 2*BTREE_PAGE_SIZE)) // might be split later
+	right := BNode(make([]byte, BTREE_PAGE_SIZE))
 	nodeSplit2(left, right, old)
 	if left.nbytes() <= BTREE_PAGE_SIZE {
 		left = left[:BTREE_PAGE_SIZE]
@@ -220,7 +226,7 @@ func nodeSplit3(old BNode) (uint16, [3]BNode) {
 	leftleft := BNode(make([]byte, BTREE_PAGE_SIZE))
 	middle := BNode(make([]byte, BTREE_PAGE_SIZE))
 	nodeSplit2(leftleft, middle, left)
-	assert(leftleft.nbytes() <= BTREE_PAGE_SIZE)
+	utils.Assert(leftleft.nbytes() <= BTREE_PAGE_SIZE)
 	return 3, [3]BNode{leftleft, middle, right} // 3 nodes
 }
 
@@ -333,8 +339,8 @@ func nodeDelete(tree *BTree, node BNode, idx uint16, key []byte) BNode { // recu
 		tree.del(node.getPtr(idx + 1))
 		nodeReplace2Kid(newNode, node, idx, tree.new(merged), merged.getKey(0))
 	case mergeDir == 0 && updated.nkeys() == 0:
-		assert(node.nkeys() == 1 && idx == 0) // 1 empty child but no sibling
-		newNode.setHeader(BNODE_NODE, 0)      // the parent becomes empty too
+		utils.Assert(node.nkeys() == 1 && idx == 0) // 1 empty child but no sibling
+		newNode.setHeader(BNODE_NODE, 0)            // the parent becomes empty too
 	case mergeDir == 0 && updated.nkeys() > 0: // no merge
 		nodeReplaceKidN(tree, newNode, node, idx, updated)
 	}
@@ -343,5 +349,5 @@ func nodeDelete(tree *BTree, node BNode, idx uint16, key []byte) BNode { // recu
 
 func init() {
 	node1max := HEADER + 8 + 2 + 4 + BTREE_MAX_KEY_SIZE + BTREE_MAX_VALUE_SIZE
-	assert(node1max < BTREE_PAGE_SIZE)
+	utils.Assert(node1max < BTREE_PAGE_SIZE)
 }

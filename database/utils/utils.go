@@ -53,3 +53,9 @@ func SaveData2(path string, data []byte) error {
 	err = os.Rename(tmp, path) // 3. replace the target
 	return err
 }
+
+func Assert(b bool) {
+	if !b {
+		panic("assertion failed")
+	}
+}
