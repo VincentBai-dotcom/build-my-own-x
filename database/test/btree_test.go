@@ -5,8 +5,11 @@ import (
 	"testing"
 )
 
-var bTreeController = btree.NewC()
+func TestReadMissingValue(t *testing.T) {
+	bTreeController := btree.NewC()
 
-func TestSomething(t *testing.T) {
-	bTreeController.Add("1", "fdas")
+	_, ok := bTreeController.Read("fdsa")
+	if ok {
+		print("ok")
+	}
 }

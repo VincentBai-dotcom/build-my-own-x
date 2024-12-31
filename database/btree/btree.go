@@ -30,20 +30,20 @@ func (node BNode) setHeader(btype uint16, nkeys uint16) {
 
 // pointers
 func (node BNode) getPtr(idx uint16) uint64 {
-	utils.Assert(idx < node.nkeys())
+	utils.Assert(idx < node.nkeys(), "Try to read a out of bound pointer")
 	pos := HEADER + 8*idx
 	return binary.LittleEndian.Uint64(node[pos:])
 }
 
 func (node BNode) setPtr(idx uint16, val uint64) {
-	utils.Assert(idx < node.nkeys())
+	utils.Assert(idx < node.nkeys(), "Try to write a out of bound pointer")
 	pos := HEADER + 8*idx
 	binary.LittleEndian.PutUint64(node[pos:], val)
 }
 
 // offset list
 func offsetPos(node BNode, idx uint16) uint16 {
-	utils.Assert(1 <= idx && idx <= node.nkeys())
+	utils.Assert(1 <= idx && idx <= node.nkeys(), "Try to read a out of bound offset position")
 	return HEADER + 8*node.nkeys() + 2*(idx-1)
 }
 
@@ -63,17 +63,17 @@ func (node BNode) setOffset(idx uint16, offset uint16) {
 
 // key-values
 func (node BNode) kvPos(idx uint16) uint16 {
-	utils.Assert(idx <= node.nkeys())
+	utils.Assert(idx <= node.nkeys(), "Try to read a out of bound key position")
 	return HEADER + 8*node.nkeys() + 2*node.nkeys() + node.getOffset(idx)
 }
 func (node BNode) getKey(idx uint16) []byte {
-	utils.Assert(idx < node.nkeys())
+	utils.Assert(idx < node.nkeys(), "Try to read a out of bound key")
 	pos := node.kvPos(idx)
 	klen := binary.LittleEndian.Uint16(node[pos:])
 	return node[pos+4:][:klen]
 }
 func (node BNode) getVal(idx uint16) []byte {
-	utils.Assert(idx < node.nkeys())
+	utils.Assert(idx < node.nkeys(), "Try to read a out of bound val")
 	pos := node.kvPos(idx)
 	klen := binary.LittleEndian.Uint16(node[pos:])
 	vlen := binary.LittleEndian.Uint16(node[pos+2:])
@@ -93,7 +93,15 @@ type BTree struct {
 	del func(uint64)        // deallocate a page
 }
 
-// insert a new key or update an existing key
+// Read the value corresponding to the key
+func (tree *BTree) Read(key []byte) ([]byte, bool) {
+	if tree.root == 0 {
+		return nil, false
+	}
+	return treeRead(tree, tree.get(tree.root), key)
+}
+
+// Insert a new key or update an existing key
 func (tree *BTree) Insert(key []byte, val []byte) {
 	if tree.root == 0 {
 		// create the first node
@@ -199,8 +207,8 @@ func nodeAppendRange(
 	new BNode, old BNode,
 	dstNew uint16, srcOld uint16, n uint16,
 ) {
-	utils.Assert(srcOld+n <= old.nkeys())
-	utils.Assert(dstNew+n <= new.nkeys())
+	utils.Assert(srcOld+n <= old.nkeys(), "Try to append out of bound kids from older node")
+	utils.Assert(dstNew+n <= new.nkeys(), "Try to append out of bound kids to new node")
 	if n == 0 {
 		return
 	}
@@ -251,7 +259,7 @@ func nodeReplaceKidN(
 
 // split a oversized node into 2 so that the 2nd node always fits on a page
 func nodeSplit2(left BNode, right BNode, old BNode) {
-	utils.Assert(old.nbytes() > BTREE_PAGE_SIZE)
+	utils.Assert(old.nbytes() > BTREE_PAGE_SIZE, "Try to split a node that is not oversize")
 	nKey := old.nkeys()
 	rightNKey := nKey / 2
 	leftNKey := nKey - rightNKey
@@ -281,8 +289,26 @@ func nodeSplit3(old BNode) (uint16, [3]BNode) {
 	leftleft := BNode(make([]byte, BTREE_PAGE_SIZE))
 	middle := BNode(make([]byte, BTREE_PAGE_SIZE))
 	nodeSplit2(leftleft, middle, left)
-	utils.Assert(leftleft.nbytes() <= BTREE_PAGE_SIZE)
+	utils.Assert(leftleft.nbytes() <= BTREE_PAGE_SIZE, "Last splitted node shouldn't be oversize")
 	return 3, [3]BNode{leftleft, middle, right} // 3 nodes
+}
+
+func treeRead(tree *BTree, node BNode, key []byte) ([]byte, bool) {
+	idx := nodeLookupLE(node, key)
+	switch node.btype() {
+	case BNODE_LEAF:
+		// leaf, node.getKey(idx) <= key
+		if bytes.Equal(key, node.getKey(idx)) {
+			// found the key, return it.
+			return node.getVal(idx), true
+		} else {
+			return nil, false
+		}
+	case BNODE_NODE:
+		return treeRead(tree, tree.get(node.getPtr(idx)), key)
+	default:
+		panic("bad node!")
+	}
 }
 
 // insert a KV into a node, the result might be split.
@@ -411,8 +437,8 @@ func nodeDelete(tree *BTree, node BNode, idx uint16, key []byte) BNode { // recu
 		tree.del(node.getPtr(idx + 1))
 		nodeReplace2Kid(newNode, node, idx, tree.new(merged), merged.getKey(0))
 	case mergeDir == 0 && updated.nkeys() == 0:
-		utils.Assert(node.nkeys() == 1 && idx == 0) // 1 empty child but no sibling
-		newNode.setHeader(BNODE_NODE, 0)            // the parent becomes empty too
+		utils.Assert(node.nkeys() == 1 && idx == 0, "bad node when merging") // 1 empty child but no sibling
+		newNode.setHeader(BNODE_NODE, 0)                                     // the parent becomes empty too
 	case mergeDir == 0 && updated.nkeys() > 0: // no merge
 		nodeReplaceKidN(tree, newNode, node, idx, updated)
 	}
@@ -421,5 +447,5 @@ func nodeDelete(tree *BTree, node BNode, idx uint16, key []byte) BNode { // recu
 
 func init() {
 	node1max := HEADER + 8 + 2 + 4 + BTREE_MAX_KEY_SIZE + BTREE_MAX_VALUE_SIZE
-	utils.Assert(node1max < BTREE_PAGE_SIZE)
+	utils.Assert(node1max < BTREE_PAGE_SIZE, "max node size larger than BTREE_PAGE_SIZE")
 }

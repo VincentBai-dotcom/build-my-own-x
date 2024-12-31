@@ -54,8 +54,8 @@ func SaveData2(path string, data []byte) error {
 	return err
 }
 
-func Assert(b bool) {
+func Assert(b bool, errMessage string) {
 	if !b {
-		panic("assertion failed")
+		panic("assertion failed due to " + errMessage)
 	}
 }
