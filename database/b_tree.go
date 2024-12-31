@@ -54,7 +54,12 @@ func (node BNode) getOffset(idx uint16) uint16 {
 	return binary.LittleEndian.Uint16(node[offsetPos(node, idx):])
 }
 
-func (node BNode) setOffset(idx uint16, offset uint16) {}
+func (node BNode) setOffset(idx uint16, offset uint16) {
+	if idx == 0 {
+		return
+	}
+	binary.LittleEndian.PutUint16(node[offsetPos(node, idx):], offset)
+}
 
 // key-values
 func (node BNode) kvPos(idx uint16) uint16 {
@@ -68,7 +73,11 @@ func (node BNode) getKey(idx uint16) []byte {
 	return node[pos+4:][:klen]
 }
 func (node BNode) getVal(idx uint16) []byte {
-	return nil
+	utils.Assert(idx < node.nkeys())
+	pos := node.kvPos(idx)
+	klen := binary.LittleEndian.Uint16(node[pos:])
+	vlen := binary.LittleEndian.Uint16(node[pos+2:])
+	return node[pos+4+klen:][:vlen]
 }
 
 func (node BNode) nbytes() uint16 {
@@ -115,7 +124,9 @@ func (tree *BTree) Insert(key []byte, val []byte) {
 }
 
 // delete a key and returns whether the key was there
-func (tree *BTree) Delete(key []byte) bool {}
+func (tree *BTree) Delete(key []byte) bool {
+
+}
 
 // returns the first kid node whose range intersects the key. (kid[i] <= key)
 // TODO: binary search
@@ -176,6 +187,26 @@ func nodeAppendRange(
 	new BNode, old BNode,
 	dstNew uint16, srcOld uint16, n uint16,
 ) {
+	utils.Assert(srcOld+n <= old.nkeys())
+	utils.Assert(dstNew+n <= new.nkeys())
+	if n == 0 {
+		return
+	}
+	// pointers
+	for i := uint16(0); i < n; i++ {
+		new.setPtr(dstNew+i, old.getPtr(srcOld+i))
+	}
+	// offsets
+	dstBegin := new.getOffset(dstNew)
+	srcBegin := old.getOffset(srcOld)
+	for i := uint16(1); i <= n; i++ { // NOTE: the range is [1, n]
+		offset := dstBegin + old.getOffset(srcOld+i) - srcBegin
+		new.setOffset(dstNew+i, offset)
+	}
+	// KVs
+	begin := old.kvPos(srcOld)
+	end := old.kvPos(srcOld + n)
+	copy(new[new.kvPos(dstNew):], old[begin:end])
 }
 
 // copy a KV into the position
@@ -207,7 +238,19 @@ func nodeReplaceKidN(
 }
 
 // split a oversized node into 2 so that the 2nd node always fits on a page
-func nodeSplit2(left BNode, right BNode, old BNode) { // code omitted...
+func nodeSplit2(left BNode, right BNode, old BNode) {
+	utils.Assert(old.nbytes() > BTREE_PAGE_SIZE)
+	nkey := old.nkeys()
+	rightNKey := nkey / 2
+	leftNKey := nkey - rightNKey
+
+	// set headers
+	left.setHeader(old.btype(), leftNKey)
+	right.setHeader(old.btype(), rightNKey)
+
+	// copy
+	nodeAppendRange(left, old, 0, 0, leftNKey)
+	nodeAppendRange(right, old, 0, leftNKey, rightNKey)
 }
 
 // split a node if it's too big. the results are 1~3 nodes.
