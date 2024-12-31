@@ -125,7 +125,19 @@ func (tree *BTree) Insert(key []byte, val []byte) {
 
 // delete a key and returns whether the key was there
 func (tree *BTree) Delete(key []byte) bool {
-
+	node := treeDelete(tree, tree.get(tree.root), key)
+	if len(node) == 0 {
+		return false
+	}
+	tree.del(tree.root)
+	// if 1 key in internal node
+	if node.btype() == BNODE_NODE && node.nkeys() == 1 {
+		// remove level
+		tree.root = node.getPtr(0) // assign root to 0 pointer
+	} else {
+		tree.root = tree.new(node) // assign root to point to updated node
+	}
+	return true
 }
 
 // returns the first kid node whose range intersects the key. (kid[i] <= key)
@@ -240,9 +252,9 @@ func nodeReplaceKidN(
 // split a oversized node into 2 so that the 2nd node always fits on a page
 func nodeSplit2(left BNode, right BNode, old BNode) {
 	utils.Assert(old.nbytes() > BTREE_PAGE_SIZE)
-	nkey := old.nkeys()
-	rightNKey := nkey / 2
-	leftNKey := nkey - rightNKey
+	nKey := old.nkeys()
+	rightNKey := nKey / 2
+	leftNKey := nKey - rightNKey
 
 	// set headers
 	left.setHeader(old.btype(), leftNKey)
@@ -303,12 +315,29 @@ func treeInsert(tree *BTree, node BNode, key []byte, val []byte) BNode {
 
 // remove a key from a leaf node
 func leafDelete(new BNode, old BNode, idx uint16) {
+	// setup the header
+	new.setHeader(BNODE_LEAF, old.nkeys()-1)
+	// Copy
+	nodeAppendRange(new, old, 0, 0, idx)
+	nodeAppendRange(new, old, idx, idx+1, old.nkeys()-idx-1)
+}
 
-}                                                  // merge 2 nodes into 1
-func nodeMerge(new BNode, left BNode, right BNode) {} // replace 2 adjacent links with 1
+// merge 2 nodes into 1
+func nodeMerge(new BNode, left BNode, right BNode) {
+	new.setHeader(BNODE_NODE, left.nkeys()+right.nkeys())
+	// Copy
+	nodeAppendRange(new, left, 0, 0, left.nkeys())
+	nodeAppendRange(new, right, left.nkeys(), 0, right.nkeys())
+}
+
+// replace 2 adjacent links with 1
 func nodeReplace2Kid(
 	new BNode, old BNode, idx uint16, ptr uint64, key []byte,
 ) {
+	new.setHeader(BNODE_NODE, old.nkeys()-1)
+	nodeAppendRange(new, old, 0, 0, idx)
+	nodeAppendKV(new, idx, ptr, key, nil)
+	nodeAppendRange(new, old, idx+1, idx+2, old.nkeys()-idx-1)
 }
 
 // should the updated kid be merged with a sibling?
@@ -350,7 +379,7 @@ func treeDelete(tree *BTree, node BNode, key []byte) BNode {
 			leafDelete(newNode, node, idx)
 			return newNode
 		} else {
-			panic("key value not found!")
+			return BNode{}
 		}
 	case BNODE_NODE:
 		return nodeDelete(tree, node, idx, key)
