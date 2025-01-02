@@ -17,10 +17,13 @@ type KV struct {
 }
 
 func (db *KV) Open() error {
-	db.tree.get = db.pageRead // read a page db.tree.new = db.pageAppend // apppend a page db.tree.del = func(uint64) {}
+	db.tree.Get = db.pageRead   // read a page
+	db.tree.New = db.pageAppend // apppend a page
+	db.tree.Del = func(uint64) {}
 }
+
 func (db *KV) Get(key []byte) ([]byte, bool) {
-	return db.tree.Get(key)
+	return db.tree.Read(key)
 }
 func (db *KV) Set(key []byte, val []byte) error {
 	db.tree.Insert(key, val)
