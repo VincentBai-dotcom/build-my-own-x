@@ -10,7 +10,7 @@ func TestBtreeRead(t *testing.T) {
 	c.Add("1", "1")
 	c.Add("2", "2")
 
-	val, ok := c.Read("1")
+	val, ok := c.Get("1")
 
 	if !ok {
 		t.Error("Read fail")
@@ -24,7 +24,7 @@ func TestBtreeRead(t *testing.T) {
 func TestReadMissingKey(t *testing.T) {
 	c := btree.NewC()
 
-	val, ok := c.Read("fdsa")
+	val, ok := c.Get("fdsa")
 	if ok {
 		t.Errorf("read missing key and got value %s", val)
 	}

@@ -5,7 +5,8 @@ import (
 )
 
 type KV struct {
-	Path string // file name // internals
+	Path string // file name
+	// internals
 	fd   int
 	tree btree.BTree
 	// more ...
