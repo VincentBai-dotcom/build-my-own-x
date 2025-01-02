@@ -37,8 +37,8 @@ func NewC() *C {
 	}
 }
 
-func (c *C) Get(key string) (string, bool) {
-	val, ok := c.tree.Get([]byte(key))
+func (c *C) Read(key string) (string, bool) {
+	val, ok := c.tree.Read([]byte(key))
 	return string(val), ok
 }
 

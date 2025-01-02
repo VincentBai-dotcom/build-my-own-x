@@ -94,7 +94,7 @@ type BTree struct {
 }
 
 // Read the value corresponding to the key
-func (tree *BTree) Get(key []byte) ([]byte, bool) {
+func (tree *BTree) Read(key []byte) ([]byte, bool) {
 	if tree.root == 0 {
 		return nil, false
 	}
